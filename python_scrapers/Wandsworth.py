@@ -28,7 +28,6 @@ class WandsworthParser:
         post_data = urllib.urlencode([
             ("__EVENTTARGET", ""),
             ("__EVENTARGUMENT", ""),
-            ("cboRecordType", "DC"),
             ("cboNumRecs", "99999"),
             ("cmdSearch", "Search"),
             ("drReceived:txtStart", formatted_search_day),
@@ -58,11 +57,9 @@ class WandsworthParser:
             application = PlanningApplication()
 
             primary_key = entry.find('primary_key').renderContents()
+            kind = entry.find('object_id').renderContents()
 
             application.council_reference = entry.find('application_number').renderContents()
-
-            application.info_url = "http://www.wandsworth.gov.uk/apply/showCaseFile.do?appNumber=%s" \
-                % urllib.quote(application.council_reference)
 
             application.comment_url = "http://www.wandsworth.gov.uk/apply/createComment.do?action=CreateApplicationComment&appNumber=%s" \
                 % urllib.quote(application.council_reference)
@@ -78,19 +75,36 @@ class WandsworthParser:
 
             # We need to make another request to get postcode details
             details_url = "http://www.wandsworth.gov.uk/gis/search/StdDetails.aspx?"
-            details_url = details_url + urllib.urlencode([
-                ("PT", "Planning Application Details"),
-                ("TYPE", "WBCPLANNINGREF"),
-                ("PARAM0", primary_key),
-                ("XSLT", "xslt/planningdetails.xslt"),
-                ("DAURI", "PLANNING")
-            ])
+            
+            if kind == 'PLANNINGAPPLICATION':
+                application.info_url = "http://www.wandsworth.gov.uk/apply/showCaseFile.do?appNumber=%s" \
+                    % urllib.quote(application.council_reference)
+
+                details_url = details_url + urllib.urlencode([
+                    ("PT", "Planning Application Details"),
+                    ("TYPE", "WBCPLANNINGREF"),
+                    ("PARAM0", primary_key),
+                    ("XSLT", "xslt/planningdetails.xslt"),
+                    ("DAURI", "PLANNING")
+                ])
+            else:
+                details_url = details_url + urllib.urlencode([
+                    ("PT", "Building Control Application Details"),
+                    ("TYPE", "WBCBuildingControlREF"),
+                    ("PARAM0", primary_key),
+                    ("XSLT", "xslt/bcdetails.xslt"),
+                    ("DAURI", "PLANNING")
+                ])
+                
+                application.info_url = details_url
 
             details_response = urllib2.urlopen(details_url)
             details_soup = BeautifulSoup(details_response.read())
             postcode_row = details_soup.find('table', "bodytextsmall").findAll('tr')[5]
             postcode_cell = postcode_row.find('td', "searchinput")
-            application.postcode = getPostcodeFromText(postcode_cell.string.strip())
+
+            if postcode_cell.string:
+                application.postcode = getPostcodeFromText(postcode_cell.string.strip())
 
             self._results.addApplication(application)
 
